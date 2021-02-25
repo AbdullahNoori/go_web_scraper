@@ -1,123 +1,69 @@
-
 package main
 
-
-// package main and import the required library.
-import {
-
+import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"strings"
 	"log"
-	"net/http"
-	// "net/http/cookiejar"
-	"net/url"
+	"strconv"
 
-}
-
-go get -u github.com/gocolly/colly/...
-
-
-// global constant baseURL to store base url 
-// of the website and variables username and 
-// password to store gitlab username and password
-const (
-	baseURL = "https://gitlab.com"
+	"github.com/gocolly/colly"
 )
 
-var (
-	username = "your gitlab username"
-	password = "your gitlab password"
-)
-
-
-// Struct App to store our http. Client, AuthenticityToken
-//  to store authenticity_token value and Project to store 
-// the list of repositories scraped from git
-type App struct {
-	Client *http.Client
+// Structure tigerfact type
+type TigerFact struct {
+	ID          int    `json:"id"`
+	Description string `json:"description"`
 }
 
-type AuthenticityToken struct {
-	Token string
-}
-
-type Project struct {
-	Name string
-}
-
-// function to storing the value of the token 
-// in AuthenticityToken struct and returning it.
-func (app *App) getToken() AuthenticityToken {
-	loginURL := baseURL + "/users/sign_in"
-	client := app.Client
-
-	response, err := client.Get(loginURL)
-
-	if err != nil {
-		log.Fatalln("Error fetching response. ", err)
-	}
-
-	defer response.Body.Close()
-
-	document, err := goquery.NewDocumentFromReader(response.Body)
-	if err != nil {
-		log.Fatal("Error loading HTTP response body. ", err)
-	}
-
-	token, _ := document.Find("input[name='authenticity_token']").Attr("value")
-
-	authenticityToken := AuthenticityToken{
-		Token: token,
-	}
-
-	return authenticityToken
-}
-
-// function will login to the website using the 
-// credentials username, password and authenticity_token
-
-func (app *App) login() {
-	client := app.Client
-
-	authenticityToken := app.getToken()
-
-	loginURL := baseURL + "/users/sign_in"
-
-	data := url.Values{
-		"authenticity_token": {authenticityToken.Token},
-		"user[login]":        {username},
-		"user[password]":     {password},
-	}
-
-	response, err := client.PostForm(loginURL, data)
-
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	defer response.Body.Close()
-
-	_, err = ioutil.ReadAll(response.Body)
-	if err != nil {
-		log.Fatalln(err)
-	}
-}
-
-// scrape list of projects and store in projects
-//  variable and at the end we are looping through 
-// the projects array and printing our project name to the console
+// Main function
 func main() {
-	jar, _ := cookiejar.New(nil)
+	// slice holds facts
+	allFacts := make([]TigerFact, 0)
 
-	app := App{
-		Client: &http.Client{Jar: jar},
+	collector := colly.NewCollector(
+		colly.AllowedDomains("factretriever", "www.factretriever.com"),
+	)
+	// Function allows you to register a callback for when the collector
+	// reaches a portion of a page that matches a specific HTML tag specifier
+	collector.OnHTML(".factsList li", func(element *colly.HTMLElement) {
+		factId, err := strconv.Atoi(element.Attr("id"))
+		// returns error
+		if err != nil {
+			log.Println("Sorry, Could Not Get ID")
+		}
+
+		factDetails := element.Text
+
+		fact := TigerFact{
+			ID:          factId,
+			Description: factDetails,
+		}
+
+		allFacts = append(allFacts, fact)
+	})
+
+	collector.OnRequest(func(request *colly.Request) {
+		fmt.Println("Visiting", request.URL.String())
+	})
+
+	collector.Visit("https://www.factretriever.com/tiger-facts")
+
+	// enc := json.NewEncoder(os.Stdout)
+	// enc.SetIndent("", " ")
+	// enc.Encode(allFacts)
+
+	writeJSON(allFacts)
+
+}
+
+// returns json encoded and err data
+func writeJSON(data []TigerFact) {
+	file, err := json.MarshalIndent(data, "", " ")
+	if err != nil {
+		log.Println("Unable to create JSon file")
+		return
 	}
 
-	app.login()
-	projects := app.getProjects()
-
-	for index, project := range projects {
-		fmt.Printf("%d: %s\n", index+1, project.Name)
-	}
+	_ = ioutil.WriteFile("tiger-facts.json", file, 0644)
 }
