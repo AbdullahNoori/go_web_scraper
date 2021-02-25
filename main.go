@@ -24,8 +24,8 @@ func main() {
 	collector := colly.NewCollector(
 		colly.AllowedDomains("factretriever", "www.factretriever.com"),
 	)
-	// Function allows you to register a callback for when the collector
-	// reaches a portion of a page that matches a specific HTML tag specifier
+	// HTMLElement struct allows to get attributes with the Attr function,
+	//  extract HTMLElement text
 	collector.OnHTML(".factsList li", func(element *colly.HTMLElement) {
 		factId, err := strconv.Atoi(element.Attr("id"))
 		// returns error
@@ -42,7 +42,7 @@ func main() {
 
 		allFacts = append(allFacts, fact)
 	})
-
+	// Access to the entire HTML document
 	collector.OnRequest(func(request *colly.Request) {
 		fmt.Println("Visiting", request.URL.String())
 	})
